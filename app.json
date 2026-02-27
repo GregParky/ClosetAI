@@ -1,22 +1,32 @@
 {
   "expo": {
+    "newArchEnabled": false,
     "name": "ClosetAI",
     "owner": "gregparky",
     "slug": "closet-ai",
     "scheme": "closetai",
     "version": "1.0.0",
     "orientation": "portrait",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gregpark.closetai"
+      "bundleIdentifier": "com.gregpark.closetai",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.gregpark.closetai",
@@ -29,10 +39,17 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "googleWebClientId": "XXXXX.apps.googleusercontent.com",
-      "googleIosClientId": "XXXXX.apps.googleusercontent.com",
-      "googleAndroidClientId": "XXXXX.apps.googleusercontent.com"
+      "google": {
+        "webClientId": "1009777341636-37bfbmg1e901n9s2tji0tc2i1f81fsj7.apps.googleusercontent.com",
+        "iosClientId": "1009777341636-1nmlmms9h1tn19ina5v2u8sglghhtfof.apps.googleusercontent.com",
+        "androidClientId": "1009777341636-5q9i0an6rthkkliv8vvqmfk054uhrbmp.apps.googleusercontent.com"
+      },
+      "eas": {
+        "projectId": "35d2bffd-4d76-44ba-a0fa-01d38467b360"
+      }
     },
-    "plugins": ["expo-web-browser"]
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

@@ -1,22 +1,20 @@
 // Navigation.js
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
-import { useAuth } from './context/AuthContext';
-import AuthScreen from './screens/AuthScreen';
-import ClosetScreen from './screens/ClosetScreen';
-import PreferencesScreen from './screens/PreferencesScreen';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-const Stack = createStackNavigator();
+import { useAuth } from './context/AuthContext';
+
+import AuthScreen from './screens/AuthScreen';
+import PreferencesScreen from './screens/PreferencesScreen';
+import MainTabs from './navigation/MainTabs';
+
+const Stack = createNativeStackNavigator();
 
 export default function Navigation() {
-  // ✅ useAuth() (and thus useContext) is called INSIDE a component
   const { user, initializing } = useAuth();
 
-  if (initializing) {
-    // You can render a splash or loading screen here
-    return null;
-  }
+  if (initializing) return null;
 
   return (
     <NavigationContainer>
@@ -24,9 +22,9 @@ export default function Navigation() {
         {user ? (
           <>
             <Stack.Screen
-              name="Closet"
-              component={ClosetScreen}
-              options={{ title: 'My Closet' }}
+              name="MainTabs"
+              component={MainTabs}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="Preferences"
@@ -35,11 +33,11 @@ export default function Navigation() {
             />
           </>
         ) : (
-            <Stack.Screen
-              name="Auth"
-              component={AuthScreen}
-              options={{ headerShown: false }}
-            />
+          <Stack.Screen
+            name="Auth"
+            component={AuthScreen}
+            options={{ headerShown: false }}
+          />
         )}
       </Stack.Navigator>
     </NavigationContainer>

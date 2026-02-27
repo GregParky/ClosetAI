@@ -1,31 +1,35 @@
 {
   "cli": {
-    "version": ">= 6.0.0"
+    "version": ">= 6.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
-      "android": {
-        "buildType": "apk"
-      },
+      "developmentClient": true,
+      "distribution": "internal",
+      "node": "20.18.1",
       "ios": {
         "simulator": true
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
     "preview": {
-      "android": {
-        "distribution": "internal"
-      },
+      "distribution": "internal",
+      "node": "20.18.1",
       "ios": {
-        "distribution": "internal"
+        "simulator": true
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
     "production": {
-      "android": {
-        "distribution": "store"
-      },
-      "ios": {
-        "distribution": "store"
-      }
+      "distribution": "store",
+      "node": "20.18.1",
+      "ios": {},
+      "android": {}
     }
   },
   "submit": {

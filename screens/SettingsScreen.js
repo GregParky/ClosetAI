@@ -2,19 +2,22 @@ import React from 'react';
 import { View, Text, Button, StyleSheet, Switch, Alert } from 'react-native';
 import { auth } from '../firebase/firebaseConfig';
 import { signOut } from 'firebase/auth';
-import { useTheme } from '../context/ThemeContext'; // ✅ Import our ThemeContext
+import { useTheme } from '../context/ThemeContext';
 
 export default function SettingsScreen({ navigation }) {
   const user = auth.currentUser;
-  const { isDarkMode, toggleTheme } = useTheme(); // ✅ Use global theme state
+  const { isDarkMode, toggleTheme } = useTheme();
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      // ✅ Navigation will automatically switch to Auth because user becomes null
     } catch (err) {
       Alert.alert('Logout failed', err.message);
     }
   };
+
+
 
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : '#fff' }]}>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>626091187407-hgvg7kb67n25mc97j5734kbarl3ofkdj.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.626091187407-hgvg7kb67n25mc97j5734kbarl3ofkdj</string>
+	<key>API_KEY</key>
+	<string>AIzaSyAvmktrl4SLDzqoJJgxE2nBtDMO46oHNbE</string>
+	<key>GCM_SENDER_ID</key>
+	<string>626091187407</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.gregpark.closetai</string>
+	<key>PROJECT_ID</key>
+	<string>closetai-5188c</string>
+	<key>STORAGE_BUCKET</key>
+	<string>closetai-5188c.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:626091187407:ios:2f743bb4e65d0cb1872bba</string>
+</dict>
+</plist>

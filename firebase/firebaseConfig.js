@@ -1,5 +1,10 @@
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// firebase/firebaseConfig.js
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+import { getStorage } from 'firebase/storage';
+
 const firebaseConfig = {
   apiKey: "AIzaSyDb0JS47ViyAXaloLXZv4qYSLc9SwB193k",
   authDomain: "closetai-5188c.firebaseapp.com",
@@ -10,14 +15,15 @@ const firebaseConfig = {
   measurementId: "G-JZF1VWTY0Q"
 };
 
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+// ✅ Don't redeclare app if hot reload runs this file again
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-const app = initializeApp(firebaseConfig);
+// ✅ React Native needs initializeAuth + persistence
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+});
 
-export const auth = getAuth(app);
 export const db = getFirestore(app);
+
 export const storage = getStorage(app);
-export const googleWebClientId = "626091187407-8jteapulfhpgt9j99nsgbdinec10ntfn.apps.googleusercontent.com";
+
