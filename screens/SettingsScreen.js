@@ -3,9 +3,10 @@ import { View, Text, Button, StyleSheet, Switch, Alert } from 'react-native';
 import { auth } from '../firebase/firebaseConfig';
 import { signOut } from 'firebase/auth';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
-export default function SettingsScreen({ navigation }) {
-  const user = auth.currentUser;
+export default function SettingsScreen() {
+  const { user } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
 
   const handleLogout = async () => {

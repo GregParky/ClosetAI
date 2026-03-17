@@ -1,0 +1,116 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function hasRequiredClosetFields(data) {
+      return data.keys().hasAll(['userId', 'imageUrl', 'category', 'type', 'color']) &&
+        data.userId is string &&
+        data.userId.size() > 0 &&
+        data.imageUrl is string &&
+        data.imageUrl.size() > 0 &&
+        data.category is string &&
+        data.type is string &&
+        data.color is string &&
+        (!('isPublic' in data) || data.isPublic is bool);
+    }
+
+    function isThreadParticipant(participantIds) {
+      return isSignedIn() && participantIds is list && request.auth.uid in participantIds;
+    }
+
+    function isValidParticipantList(participantIds) {
+      return participantIds is list &&
+        participantIds.size() >= 2 &&
+        participantIds.size() <= 20 &&
+        request.auth.uid in participantIds;
+    }
+
+    // Closet items are private by default.
+    // Discover can read only docs explicitly marked as public.
+    match /closets/{itemId} {
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        hasRequiredClosetFields(request.resource.data);
+      allow read: if resource.data.isPublic == true || isOwner(resource.data.userId);
+      allow update: if isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId &&
+        hasRequiredClosetFields(request.resource.data);
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // User preferences are private to the owner.
+    match /preferences/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) &&
+        (!('avoidDenimOnDenim' in request.resource.data) || request.resource.data.avoidDenimOnDenim is bool) &&
+        (!('preferCasual' in request.resource.data) || request.resource.data.preferCasual is bool);
+      allow delete: if false;
+    }
+
+    // Inbox notifications (server/admin-written; user-readable).
+    match /notifications/{notificationId} {
+      allow read: if isOwner(resource.data.userId);
+      allow write: if false;
+    }
+
+    // Direct message threads.
+    match /threads/{threadId} {
+      allow read: if isThreadParticipant(resource.data.participantIds);
+      allow create: if isSignedIn() &&
+        isValidParticipantList(request.resource.data.participantIds);
+      allow update: if isThreadParticipant(resource.data.participantIds) &&
+        request.resource.data.participantIds == resource.data.participantIds;
+      allow delete: if isThreadParticipant(resource.data.participantIds);
+    }
+
+    // Optional subcollection for thread messages.
+    match /threads/{threadId}/messages/{messageId} {
+      allow read: if isThreadParticipant(
+        get(/databases/$(database)/documents/threads/$(threadId)).data.participantIds
+      );
+      allow create: if isThreadParticipant(
+        get(/databases/$(database)/documents/threads/$(threadId)).data.participantIds
+      ) &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.text is string &&
+        request.resource.data.text.size() > 0 &&
+        request.resource.data.text.size() <= 2000;
+      allow update, delete: if false;
+    }
+
+    // Partner collections are read-only in app (managed by admins/backoffice).
+    match /partnerRecommendations/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /partner_products/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /partnerProducts/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Trending collections are read-only in app (managed by admins/backoffice).
+    match /trendingOutfits/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /trending_outfits/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

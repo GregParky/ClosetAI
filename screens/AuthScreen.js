@@ -60,15 +60,29 @@ export default function AuthScreen() {
   const webClientId = googleCfg.webClientId ?? extra.googleWebClientId;
   const iosClientId = googleCfg.iosClientId ?? extra.googleIosClientId;
   const androidClientId = googleCfg.androidClientId ?? extra.googleAndroidClientId;
-  const isExpoGo = Constants.appOwnership === 'expo';
+  const isExpoGo =
+    Constants.appOwnership === 'expo' ||
+    Constants.executionEnvironment === 'storeClient';
+  const useExpoProxy = isExpoGo;
+  const googleSupportedHere = !isExpoGo;
+
+  const iosGoogleScheme = iosClientId
+    ? `com.googleusercontent.apps.${String(iosClientId).replace('.apps.googleusercontent.com', '')}`
+    : null;
 
   // Redirect handling:
   // - Expo Go requires the AuthSession proxy (useProxy: true)
   // - Dev builds / standalone use your scheme (useProxy: false)
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: 'closetai',
-    useProxy: isExpoGo,
-  });
+  const redirectUri = useExpoProxy
+    ? AuthSession.makeRedirectUri({
+        useProxy: true,
+        projectNameForProxy: '@gregparky/closet-ai',
+      })
+    : AuthSession.makeRedirectUri({
+        native: iosGoogleScheme ? `${iosGoogleScheme}:/oauthredirect` : undefined,
+        scheme: 'closetai',
+        path: 'oauthredirect',
+      });
 
   const REMEMBER_KEY = 'closetai_remember_login';
   const SAVED_EMAIL_KEY = 'closetai_saved_email';
@@ -207,16 +221,35 @@ export default function AuthScreen() {
   // ----------------------------
   // Google auth (Expo AuthSession -> Firebase)
   // ----------------------------
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId,
-    iosClientId,
-    androidClientId,
-    redirectUri,
-    scopes: ['openid', 'profile', 'email'],
-  });
+  const googleRequestConfig = useMemo(() => {
+    if (useExpoProxy) {
+      return {
+        clientId: webClientId,
+        redirectUri,
+        scopes: ['openid', 'profile', 'email'],
+      };
+    }
+
+    return {
+      iosClientId,
+      androidClientId,
+      webClientId,
+      redirectUri,
+      scopes: ['openid', 'profile', 'email'],
+    };
+  }, [androidClientId, iosClientId, redirectUri, useExpoProxy, webClientId]);
+
+  const [request, response, promptAsync] = Google.useAuthRequest(googleRequestConfig);
 
   const handleGoogle = async () => {
     clearServerError();
+
+    if (!googleSupportedHere) {
+      setServerError(
+        'Google sign-in is unavailable in Expo Go for this project. Use email/password here, or use an iOS development build for Google login testing.'
+      );
+      return;
+    }
 
     if (!webClientId) {
       setServerError('Missing google webClientId in app.json (expo.extra.google.webClientId).');
@@ -232,7 +265,7 @@ export default function AuthScreen() {
       setGoogleLoading(true);
 
       const result = await promptAsync({
-        useProxy: isExpoGo,
+        useProxy: useExpoProxy,
         showInRecents: true,
       });
 
@@ -414,14 +447,21 @@ export default function AuthScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.secondaryBtn, loading || googleLoading || resetLoading || !request ? styles.btnDisabled : null]}
+          style={[
+            styles.secondaryBtn,
+            loading || googleLoading || resetLoading || !request || !googleSupportedHere
+              ? styles.btnDisabled
+              : null,
+          ]}
           onPress={handleGoogle}
-          disabled={loading || googleLoading || resetLoading || !request}
+          disabled={loading || googleLoading || resetLoading || !request || !googleSupportedHere}
         >
           {googleLoading ? (
             <ActivityIndicator />
           ) : (
-            <Text style={styles.secondaryBtnText}>Continue with Google</Text>
+            <Text style={styles.secondaryBtnText}>
+              {googleSupportedHere ? 'Continue with Google' : 'Google Login (Dev Build Only)'}
+            </Text>
           )}
         </TouchableOpacity>
 

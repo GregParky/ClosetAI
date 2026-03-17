@@ -8,16 +8,16 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  ActionSheetIOS,
   Modal,
   ScrollView,
   RefreshControl,
   Platform,
   Pressable,
+  Linking,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-import { DraxProvider, DraxScrollView, DraxView } from 'react-native-drax';
 
 import { useAuth } from '../context/AuthContext';
 import { uploadImageToStorage } from '../firebase/uploadImageToStorage';
@@ -27,7 +27,6 @@ import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/firebaseConfig';
 
 const CACHE_TTL_MS = 1000 * 60 * 10; // 10 minutes
-const DRAG_ACTIVATION_DELAY_MS = 180;
 
 const CATEGORIES = [
   { key: 'unassigned', label: 'Your Items' },
@@ -54,6 +53,7 @@ export default function ClosetScreen() {
   const [closetItems, setClosetItems] = useState([]);
   const [loadingCloset, setLoadingCloset] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const [pickerAssets, setPickerAssets] = useState([]); // [{ uri, ... }]
   const [showPreview, setShowPreview] = useState(false);
@@ -64,9 +64,6 @@ export default function ClosetScreen() {
     uploadingRef.current = v;
     setUploading(v);
   };
-
-  // ✅ This fixes “can’t scroll” with drag: scroll disabled only while dragging.
-  const [dragging, setDragging] = useState(false);
 
   const cacheKey = useMemo(() => (user?.uid ? `closet_cache_${user.uid}` : null), [user?.uid]);
 
@@ -114,10 +111,12 @@ export default function ClosetScreen() {
           category: it.category || 'unassigned',
         }));
         setClosetItems(normalized);
+        setLoadError('');
         setLoadingCloset(false);
         await saveToCache(normalized);
       } catch (err) {
         console.error('Error loading closet:', err);
+        setLoadError(err?.message || 'Could not load your closet right now.');
         setLoadingCloset(false);
         if (!silent) Alert.alert('Error', err?.message || 'Failed to load your closet items.');
       }
@@ -142,11 +141,30 @@ export default function ClosetScreen() {
   }, [user?.uid, loadCloset]);
 
   const requestMediaPermissions = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status, accessPrivileges } = permission;
+
     if (status !== 'granted') {
       Alert.alert('Permission required', 'We need access to your photo library to add items.');
       return false;
     }
+
+    if (Platform.OS === 'ios' && accessPrivileges === 'limited') {
+      Alert.alert(
+        'Limited Photo Access',
+        'ClosetAI can currently access only selected photos. To use your full photo library, allow full access in iOS Settings.',
+        [
+          { text: 'Continue', style: 'cancel' },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              Linking.openSettings();
+            },
+          },
+        ]
+      );
+    }
+
     return true;
   };
 
@@ -309,34 +327,78 @@ export default function ClosetScreen() {
     [closetItems, saveToCache]
   );
 
-  // ✅ Key fix for measureLayout spam:
-  // - Do NOT wrap the draggable with TouchableOpacity.
-  // - Use a plain View that cannot collapse: collapsable={false}
-  // - Use Pressable INSIDE, but keep the measured layout native.
+  const openMoveItemMenu = useCallback(
+    (item) => {
+      const moveToCategory = async (targetCategory) => {
+        await updateItemCategory(item, targetCategory);
+      };
+
+      if (Platform.OS === 'ios') {
+        const options = [...CATEGORIES.map((c) => `Move to ${c.label}`), 'Cancel'];
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options,
+            cancelButtonIndex: options.length - 1,
+          },
+          async (index) => {
+            if (index === options.length - 1) return;
+            const category = CATEGORIES[index];
+            if (!category) return;
+            await moveToCategory(category.key);
+          }
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Move item',
+        'Choose a section',
+        [
+          ...CATEGORIES.map((c) => ({
+            text: c.label,
+            onPress: () => moveToCategory(c.key),
+          })),
+          { text: 'Cancel', style: 'cancel' },
+        ],
+        { cancelable: true }
+      );
+    },
+    [updateItemCategory]
+  );
+
+  const openItemActions = useCallback(
+    (item) => {
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options: ['Move to section', 'Delete item', 'Cancel'],
+            cancelButtonIndex: 2,
+            destructiveButtonIndex: 1,
+          },
+          (index) => {
+            if (index === 0) openMoveItemMenu(item);
+            if (index === 1) handleDeleteItem(item);
+          }
+        );
+        return;
+      }
+
+      Alert.alert('Item actions', 'Choose an action', [
+        { text: 'Move to section', onPress: () => openMoveItemMenu(item) },
+        { text: 'Delete item', style: 'destructive', onPress: () => handleDeleteItem(item) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    },
+    [handleDeleteItem, openMoveItemMenu]
+  );
+
   const renderDraggableItem = (item) => {
     return (
-      <DraxView
-        key={item.id}
-        draggable
-        longPressDelay={DRAG_ACTIVATION_DELAY_MS}
-        dragPayload={item}
-        style={styles.itemContainer}
-        draggingStyle={styles.dragging}
-        dragReleasedStyle={styles.dragging}
-        hoverDraggingStyle={styles.hoverDragging}
-        onDragStart={() => setDragging(true)}
-        onDragEnd={() => setDragging(false)}
-        onDragDrop={() => setDragging(false)}
-      >
-        <View style={{ flex: 1 }} collapsable={false}>
-          <Pressable
-            style={{ flex: 1 }}
-            onLongPress={() => handleDeleteItem(item)}
-          >
-            <Image source={{ uri: item.imageUrl }} style={styles.itemImage} />
-          </Pressable>
-        </View>
-      </DraxView>
+      <View key={item.id} style={styles.itemContainer}>
+        <Pressable style={{ flex: 1 }} onLongPress={() => openItemActions(item)}>
+          <Image source={{ uri: item.imageUrl }} style={styles.itemImage} />
+        </Pressable>
+      </View>
     );
   };
 
@@ -344,19 +406,8 @@ export default function ClosetScreen() {
     const items = grouped[categoryKey] || [];
 
     return (
-      <DraxView
-        receptive
-        style={styles.dropZone}
-        receivingStyle={styles.dropZoneReceiving}
-        onReceiveDragDrop={async ({ dragged }) => {
-          const draggedItem = dragged?.payload;
-          if (!draggedItem) return;
-          await updateItemCategory(draggedItem, categoryKey);
-        }}
-      >
+      <View style={styles.dropZone}>
         <Text style={styles.sectionTitle}>{title}</Text>
-
-        {/* ✅ NON-scroll grid; page scroll stays in control */}
         <View style={styles.grid}>
           {items.length === 0 ? (
             <Text style={styles.emptyInSection}>Drop items here</Text>
@@ -364,15 +415,25 @@ export default function ClosetScreen() {
             items.map(renderDraggableItem)
           )}
         </View>
-      </DraxView>
+      </View>
     );
   };
 
-  return (
-    <DraxProvider>
-      <View style={styles.container}>
+  const screenContent = (
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.sectionList}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+        scrollEnabled
+        alwaysBounceVertical
+        bounces
+        showsVerticalScrollIndicator
+        contentInsetAdjustmentBehavior="automatic"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={styles.flatListContent}
+      >
         <Text style={styles.title}>My Closet</Text>
-
         <TouchableOpacity
           style={[styles.addBtn, uploading ? styles.addBtnDisabled : null]}
           onPress={handleAddToClosetPress}
@@ -388,76 +449,106 @@ export default function ClosetScreen() {
           )}
         </TouchableOpacity>
 
-        <DraxScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 160 }}
-          scrollEnabled={!dragging} // ✅ Scroll works again
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        >
-          {loadingCloset && closetItems.length === 0 ? (
-            <ActivityIndicator size="large" style={{ marginTop: 20 }} />
-          ) : (
-            <>
-              {CATEGORIES.map((c) => (
-                <CategoryDropZone key={c.key} categoryKey={c.key} title={c.label} />
-              ))}
-            </>
-          )}
-        </DraxScrollView>
-
-        {/* Preview Modal */}
-        <Modal visible={showPreview} animationType="slide" transparent>
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Preview</Text>
-              <Text style={styles.modalSubtitle}>{pickerAssets.length} image(s) selected</Text>
-
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
-                {pickerAssets.map((a, idx) => (
-                  <Image
-                    key={`${a.uri}-${idx}`}
-                    source={{ uri: a.uri }}
-                    style={styles.previewImage}
-                  />
-                ))}
-              </ScrollView>
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, styles.modalBtnGhost]}
-                  onPress={handleCancelPreview}
-                  disabled={uploading}
-                >
-                  <Text style={[styles.modalBtnText, styles.modalBtnTextGhost]}>Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.modalBtn, styles.modalBtnPrimary]}
-                  onPress={handleConfirmAdd}
-                  disabled={uploading}
-                >
-                  <Text style={styles.modalBtnText}>Confirm add</Text>
-                </TouchableOpacity>
-              </View>
-
-              {Platform.OS === 'ios' ? (
-                <Text style={styles.tipText}>Tip: long-press an item to delete it.</Text>
-              ) : null}
-            </View>
+        {loadError ? (
+          <View style={styles.warningBanner}>
+            <Text style={styles.warningText}>{loadError}</Text>
           </View>
-        </Modal>
-      </View>
-    </DraxProvider>
+        ) : null}
+
+        {loadingCloset ? <ActivityIndicator size="large" style={{ marginTop: 20 }} /> : null}
+
+        {!loadingCloset && closetItems.length === 0 ? (
+          <View style={styles.emptyStateBox}>
+            <Text style={styles.emptyStateText}>Your closet is empty. Tap "Add to Closet" to begin.</Text>
+          </View>
+        ) : null}
+
+        {CATEGORIES.map((item) => (
+          <CategoryDropZone key={item.key} categoryKey={item.key} title={item.label} />
+        ))}
+      </ScrollView>
+
+      {/* Preview Modal */}
+      <Modal visible={showPreview} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Preview</Text>
+            <Text style={styles.modalSubtitle}>{pickerAssets.length} image(s) selected</Text>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+              {pickerAssets.map((a, idx) => (
+                <Image
+                  key={`${a.uri}-${idx}`}
+                  source={{ uri: a.uri }}
+                  style={styles.previewImage}
+                />
+              ))}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnGhost]}
+                onPress={handleCancelPreview}
+                disabled={uploading}
+              >
+                <Text style={[styles.modalBtnText, styles.modalBtnTextGhost]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={handleConfirmAdd}
+                disabled={uploading}
+              >
+                <Text style={styles.modalBtnText}>Confirm add</Text>
+              </TouchableOpacity>
+            </View>
+
+            {Platform.OS === 'ios' ? (
+              <Text style={styles.tipText}>Tip: long-press an item to delete it.</Text>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
+  return screenContent;
 }
 
 const TILE = 108;
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, paddingTop: 32, backgroundColor: '#ffffff' },
+  sectionList: { flex: 1 },
+  flatListContent: { paddingBottom: 160 },
   title: { fontSize: 26, fontWeight: 'bold', marginBottom: 14 },
+  warningBanner: {
+    marginBottom: 10,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fff4dd',
+    borderWidth: 1,
+    borderColor: '#ffe2a6',
+  },
+  warningText: {
+    color: '#7a4f00',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  emptyStateBox: {
+    borderWidth: 1,
+    borderColor: '#ececec',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 10,
+    backgroundColor: '#fafafa',
+  },
+  emptyStateText: {
+    color: '#444',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 
   addBtn: {
     borderRadius: 12,
@@ -476,12 +567,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
     borderRadius: 14,
     padding: 12,
+    minHeight: 150,
     marginBottom: 12,
   },
-  dropZoneReceiving: {
-    borderColor: '#111',
-  },
-
   sectionTitle: { fontSize: 18, fontWeight: '800', marginBottom: 10 },
   emptyInSection: { color: '#777', paddingVertical: 10 },
 
@@ -489,6 +577,7 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    minHeight: 88,
   },
 
   itemContainer: {
@@ -501,14 +590,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   itemImage: { width: '100%', height: '100%' },
-
-  dragging: {
-    opacity: 0.85,
-  },
-  hoverDragging: {
-    borderWidth: 2,
-    borderColor: '#111',
-  },
 
   modalBackdrop: {
     flex: 1,

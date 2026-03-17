@@ -1,10 +1,12 @@
 {
   "expo": {
-    "newArchEnabled": false,
     "name": "ClosetAI",
     "owner": "gregparky",
     "slug": "closet-ai",
-    "scheme": "closetai",
+    "scheme": [
+      "closetai",
+      "com.googleusercontent.apps.1009777341636-1nmlmms9h1tn19ina5v2u8sglghhtfof"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "platforms": [

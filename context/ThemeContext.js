@@ -7,6 +7,7 @@ const ThemeContext = createContext(null);
 // Provider component
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState('light'); // or 'dark'
+  const isDarkMode = theme === 'dark';
 
   const toggleTheme = () => {
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
@@ -14,6 +15,7 @@ export function ThemeProvider({ children }) {
 
   const value = {
     theme,
+    isDarkMode,
     toggleTheme,
   };
 
