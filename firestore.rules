@@ -31,6 +31,16 @@ service cloud.firestore {
         request.auth.uid in participantIds;
     }
 
+    // ELO score can move by at most K_BASE (0.8) per comparison — see services/eloService.js.
+    function isValidRatingFields(data) {
+      return data.keys().hasAll(['userId', 'outfitId', 'score', 'comparisons', 'wins']) &&
+        data.userId is string &&
+        data.outfitId is string &&
+        data.score is number && data.score >= 0 && data.score <= 10 &&
+        data.comparisons is int && data.comparisons >= 0 &&
+        data.wins is int && data.wins >= 0 && data.wins <= data.comparisons;
+    }
+
     // Closet items are private by default.
     // Discover can read only docs explicitly marked as public.
     match /closets/{itemId} {
@@ -62,7 +72,10 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.userId);
       allow update: if isOwner(resource.data.userId) ||
         (isSignedIn() &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount']));
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount']) &&
+         request.resource.data.likeCount is int &&
+         (request.resource.data.likeCount == resource.data.likeCount + 1 ||
+          request.resource.data.likeCount == resource.data.likeCount - 1));
     }
 
     // Outfit likes — one doc per user-outfit pair.
@@ -110,7 +123,19 @@ service cloud.firestore {
     // Outfit ELO ratings — private to owner, readable by any signed-in user for leaderboard.
     match /outfitRatings/{ratingId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        isValidRatingFields(request.resource.data) &&
+        request.resource.data.comparisons == 1;
+      allow update: if isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.outfitId == resource.data.outfitId &&
+        isValidRatingFields(request.resource.data) &&
+        request.resource.data.comparisons == resource.data.comparisons + 1 &&
+        request.resource.data.wins >= resource.data.wins &&
+        request.resource.data.wins <= resource.data.wins + 1 &&
+        (request.resource.data.score - resource.data.score) <= 0.85 &&
+        (resource.data.score - request.resource.data.score) <= 0.85;
       allow delete: if isOwner(resource.data.userId);
     }
 
