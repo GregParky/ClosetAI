@@ -306,6 +306,11 @@ export default function AuthScreen() {
           response.params?.id_token ||
           response?.id_token;
 
+        const accessToken =
+          response.authentication?.accessToken ||
+          response.params?.access_token ||
+          response?.access_token;
+
         if (!idToken) {
           setServerError(
             'Google sign-in succeeded but no ID token was returned. ' +
@@ -314,9 +319,15 @@ export default function AuthScreen() {
           return;
         }
 
-        const credential = GoogleAuthProvider.credential(idToken);
+        console.log('GOOGLE: idToken present?', !!idToken);
+        console.log('GOOGLE: accessToken present?', !!accessToken);
+        console.log('GOOGLE: idToken prefix:', idToken?.slice(0, 30));
+
+        const credential = GoogleAuthProvider.credential(idToken, accessToken);
         await signInWithCredential(auth, credential);
       } catch (err) {
+        console.log('GOOGLE: Firebase error code:', err?.code);
+        console.log('GOOGLE: Firebase error message:', err?.message);
         setServerError(firebaseErrorToMessage(err));
       } finally {
         setGoogleLoading(false);

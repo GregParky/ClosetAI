@@ -1,367 +1,199 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  FlatList,
-  Image,
-  Pressable,
-  ActivityIndicator,
+  View, Text, StyleSheet, FlatList,
+  Pressable, ScrollView,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useAuth } from '../context/AuthContext';
-import { getDiscoverFeed } from '../firebase/firestoreService';
+import { useNavigation } from '@react-navigation/native';
+import { useColors } from '../context/ThemeContext';
 
-const FALLBACK_EXPLORE = [
-  { id: 'f-1', kind: 'outfit', imageUrl: 'https://picsum.photos/seed/closet-1/800/800', title: 'Street fit', subtitle: '@styledaily' },
-  { id: 'f-2', kind: 'trend', imageUrl: 'https://picsum.photos/seed/closet-2/800/800', title: 'Neutral layers', subtitle: 'Trending' },
-  { id: 'f-3', kind: 'partner', imageUrl: 'https://picsum.photos/seed/closet-3/800/800', title: 'Sneaker drop', subtitle: 'Sponsored' },
-  { id: 'f-4', kind: 'outfit', imageUrl: 'https://picsum.photos/seed/closet-4/800/800', title: 'Office capsule', subtitle: '@dailylooks' },
-  { id: 'f-5', kind: 'trend', imageUrl: 'https://picsum.photos/seed/closet-5/800/800', title: 'Weekend denim', subtitle: 'Trending' },
-  { id: 'f-6', kind: 'partner', imageUrl: 'https://picsum.photos/seed/closet-6/800/800', title: 'Partner picks', subtitle: 'Sponsored' },
-  { id: 'f-7', kind: 'outfit', imageUrl: 'https://picsum.photos/seed/closet-7/800/800', title: 'Airport fit', subtitle: '@minwear' },
-  { id: 'f-8', kind: 'trend', imageUrl: 'https://picsum.photos/seed/closet-8/800/800', title: 'Layer game', subtitle: 'Trending' },
-  { id: 'f-9', kind: 'outfit', imageUrl: 'https://picsum.photos/seed/closet-9/800/800', title: 'Color block', subtitle: '@fitjournal' },
+const INSPIRATION = [
+  {
+    id: 'minimal',
+    aesthetic: 'Minimalist',
+    emoji: '🤍',
+    color: '#f5f5f5',
+    textColor: '#111',
+    tip: 'Stick to a neutral palette — white, grey, black, beige. Let fit and fabric speak.',
+    keyPieces: ['Slim white tee', 'Tailored trousers', 'Clean leather sneakers'],
+  },
+  {
+    id: 'street',
+    aesthetic: 'Streetwear',
+    emoji: '🧢',
+    color: '#1c1c1c',
+    textColor: '#fff',
+    tip: 'Oversized silhouettes and bold graphics. Mix high and low pieces freely.',
+    keyPieces: ['Graphic hoodie', 'Baggy cargo pants', 'Chunky sneakers'],
+  },
+  {
+    id: 'casual',
+    aesthetic: 'Casual',
+    emoji: '😎',
+    color: '#fdf3e7',
+    textColor: '#111',
+    tip: 'Comfort is the priority. Well-fitted basics always look put-together.',
+    keyPieces: ['Classic tee', 'Dark jeans', 'White sneakers'],
+  },
+  {
+    id: 'preppy',
+    aesthetic: 'Preppy',
+    emoji: '🎓',
+    color: '#1a3a5c',
+    textColor: '#fff',
+    tip: 'Layer a polo or Oxford shirt with chinos. Accessorize with a watch or belt.',
+    keyPieces: ['Oxford shirt', 'Chino pants', 'Loafers or boat shoes'],
+  },
+  {
+    id: 'athleisure',
+    aesthetic: 'Athleisure',
+    emoji: '🏃',
+    color: '#e8f5e9',
+    textColor: '#111',
+    tip: 'Performance fabrics that look good off the gym floor. Fit is everything.',
+    keyPieces: ['Fitted joggers', 'Quarter-zip pullover', 'Running shoes'],
+  },
+  {
+    id: 'business',
+    aesthetic: 'Business Casual',
+    emoji: '💼',
+    color: '#f0f0f0',
+    textColor: '#111',
+    tip: 'Smart without being stiff. A blazer over a clean shirt does a lot of work.',
+    keyPieces: ['Blazer', 'Button-down shirt', 'Slim trousers', 'Derby shoes'],
+  },
+  {
+    id: 'formal',
+    aesthetic: 'Formal',
+    emoji: '🎩',
+    color: '#111',
+    textColor: '#fff',
+    tip: 'Fit is everything. A well-tailored suit in navy or charcoal works for almost any occasion.',
+    keyPieces: ['Tailored suit', 'Dress shirt', 'Oxford shoes', 'Leather belt'],
+  },
 ];
 
-const FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'outfit', label: 'Outfits' },
-  { key: 'trend', label: 'Trending' },
-  { key: 'partner', label: 'Partners' },
+const TIPS = [
+  { id: 't1', emoji: '🌤️', title: 'Dress for the weather', body: 'Check the temperature before picking an outfit. ClosetAI factors in live weather when generating suggestions.' },
+  { id: 't2', emoji: '🎨', title: 'Color coordination', body: 'Neutrals go with everything. When in doubt, pair a bold piece with two neutral ones.' },
+  { id: 't3', emoji: '📸', title: 'Better AI results', body: 'Add a name and color when uploading items. The more detail you give, the smarter your outfit suggestions.' },
+  { id: 't4', emoji: '👟', title: 'Shoes matter most', body: 'Shoes can elevate or undercut any outfit. Make sure you have a few key pairs covering casual, smart, and formal.' },
+  { id: 't5', emoji: '🔁', title: 'Capsule wardrobe', body: '10–15 versatile pieces can create dozens of outfits. Focus on quality basics before adding statement pieces.' },
 ];
-const PAGE_SIZE = 15;
-const MIN_DISCOVER_ITEMS = PAGE_SIZE * 3;
 
-function ensureMinItems(items, min = MIN_DISCOVER_ITEMS) {
-  const base = Array.isArray(items) ? [...items] : [];
-  if (base.length >= min) return base;
-  const needed = min - base.length;
-  for (let i = 0; i < needed; i += 1) {
-    const seed = FALLBACK_EXPLORE[i % FALLBACK_EXPLORE.length];
-    base.push({
-      ...seed,
-      id: `fallback-${seed.id}-${i}`,
-    });
-  }
-  return base;
+function InspirationCard({ item }) {
+  const navigation = useNavigation();
+  return (
+    <Pressable
+      style={[styles.card, { backgroundColor: item.color }]}
+      onPress={() => navigation.navigate('Outfit')}
+    >
+      <Text style={styles.cardEmoji}>{item.emoji}</Text>
+      <Text style={[styles.cardAesthetic, { color: item.textColor }]}>{item.aesthetic}</Text>
+      <Text style={[styles.cardTip, { color: item.textColor, opacity: 0.75 }]}>{item.tip}</Text>
+      <View style={styles.cardPieces}>
+        {item.keyPieces.map((p) => (
+          <View key={p} style={[styles.piecePill, { borderColor: item.textColor, opacity: 0.9 }]}>
+            <Text style={[styles.pieceText, { color: item.textColor }]}>{p}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={[styles.cardCta, { color: item.textColor }]}>Generate this style →</Text>
+    </Pressable>
+  );
 }
 
-function exploreMatches(item, q) {
-  if (!q) return true;
-  const needle = q.trim().toLowerCase();
-  const haystack = `${item.title || ''} ${item.subtitle || ''} ${item.kind || ''}`.toLowerCase();
-  return haystack.includes(needle);
-}
-
-function isNearBottom(nativeEvent, threshold = 160) {
-  const { contentOffset, contentSize, layoutMeasurement } = nativeEvent;
-  return contentSize.height - (contentOffset.y + layoutMeasurement.height) <= threshold;
+function TipCard({ item, colors: c }) {
+  return (
+    <View style={[styles.tipCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+      <Text style={styles.tipEmoji}>{item.emoji}</Text>
+      <View style={styles.tipBody}>
+        <Text style={[styles.tipTitle, { color: c.text }]}>{item.title}</Text>
+        <Text style={[styles.tipText, { color: c.textSecondary }]}>{item.body}</Text>
+      </View>
+    </View>
+  );
 }
 
 export default function DiscoverScreen() {
-  const initialVisibleCount = PAGE_SIZE;
-  const { user } = useAuth();
-  const [query, setQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadError, setLoadError] = useState('');
-  const [feedItems, setFeedItems] = useState([]);
-  const [visibleCount, setVisibleCount] = useState(initialVisibleCount);
-  const isPaginatingRef = useRef(false);
-
-  const loadFeed = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
-    try {
-      const items = await getDiscoverFeed(user?.uid, 180);
-      setFeedItems(ensureMinItems(items.length > 0 ? items : FALLBACK_EXPLORE));
-    } catch (err) {
-      console.error('discover feed load failed:', err);
-      setFeedItems(ensureMinItems(FALLBACK_EXPLORE));
-      setLoadError('Could not load latest discover feed. Showing fallback content.');
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.uid]);
-
-  useEffect(() => {
-    loadFeed();
-  }, [loadFeed]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const items = await getDiscoverFeed(user?.uid, 180);
-      setFeedItems(ensureMinItems(items.length > 0 ? items : FALLBACK_EXPLORE));
-      setVisibleCount(initialVisibleCount);
-    } catch (err) {
-      console.error('discover refresh failed:', err);
-      setFeedItems((prev) => (prev.length > 0 ? ensureMinItems(prev) : ensureMinItems(FALLBACK_EXPLORE)));
-    } finally {
-      setRefreshing(false);
-    }
-  }, [initialVisibleCount, user?.uid]);
-
-  const filteredFeed = useMemo(() => {
-    const byType =
-      activeFilter === 'all' ? feedItems : feedItems.filter((item) => item.kind === activeFilter);
-    return byType.filter((item) => exploreMatches(item, query));
-  }, [activeFilter, feedItems, query]);
-
-  useEffect(() => {
-    setVisibleCount(initialVisibleCount);
-  }, [initialVisibleCount]);
-
-  useEffect(() => {
-    setVisibleCount(initialVisibleCount);
-  }, [activeFilter, initialVisibleCount, query]);
-
-  const visibleFeed = useMemo(
-    () => filteredFeed.slice(0, Math.min(visibleCount, filteredFeed.length)),
-    [filteredFeed, visibleCount]
-  );
-
-  const loadNextPage = useCallback(() => {
-    if (isPaginatingRef.current || visibleCount >= filteredFeed.length) return;
-    isPaginatingRef.current = true;
-    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredFeed.length));
-  }, [filteredFeed.length, visibleCount]);
-
-  const handleEndReached = useCallback(() => {
-    loadNextPage();
-  }, [loadNextPage]);
-
-  const handleScroll = useCallback(
-    ({ nativeEvent }) => {
-      if (isNearBottom(nativeEvent)) {
-        loadNextPage();
-      }
-    },
-    [loadNextPage]
-  );
-
-  const handleScrollEnd = useCallback(
-    ({ nativeEvent }) => {
-      if (isNearBottom(nativeEvent)) {
-        loadNextPage();
-      }
-    },
-    [loadNextPage]
-  );
-
-  useEffect(() => {
-    isPaginatingRef.current = false;
-  }, [visibleCount, filteredFeed.length]);
-
-  const renderTile = ({ item }) => {
-    return (
-      <Pressable style={styles.tile}>
-        <Image source={{ uri: item.imageUrl }} style={styles.tileImage} />
-        <View style={styles.tileBadge}>
-          <Text style={styles.tileBadgeText}>
-            {item.kind === 'partner' ? 'Partner' : item.kind === 'trend' ? 'Trending' : 'Outfit'}
-          </Text>
-        </View>
-      </Pressable>
-    );
-  };
+  const c = useColors();
+  const [activeTab, setActiveTab] = useState('aesthetics');
 
   return (
-    <View style={styles.container}>
-      <View style={styles.topControls}>
-        <View style={styles.searchWrap}>
-          <Ionicons name="search-outline" size={18} color="#666" />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search profiles, outfits, inspiration..."
-            placeholderTextColor="#888"
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={styles.searchInput}
-            returnKeyType="search"
-          />
-        </View>
-        <View style={styles.filterRow}>
-          {FILTERS.map((filter) => {
-            const isActive = activeFilter === filter.key;
-            return (
-              <Pressable
-                key={filter.key}
-                onPress={() => setActiveFilter(filter.key)}
-                style={[styles.filterChip, isActive ? styles.filterChipActive : null]}
-              >
-                <Text style={[styles.filterChipText, isActive ? styles.filterChipTextActive : null]}>
-                  {filter.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+    <View style={[styles.container, { backgroundColor: c.background }]}>
+      <View style={[styles.tabRow, { backgroundColor: c.tabBg }]}>
+        <Pressable
+          style={[styles.tab, activeTab === 'aesthetics' && [styles.tabActive, { backgroundColor: c.tabActive }]]}
+          onPress={() => setActiveTab('aesthetics')}
+        >
+          <Text style={[styles.tabText, { color: c.textMuted }, activeTab === 'aesthetics' && { color: c.text }]}>
+            Aesthetics
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === 'tips' && [styles.tabActive, { backgroundColor: c.tabActive }]]}
+          onPress={() => setActiveTab('tips')}
+        >
+          <Text style={[styles.tabText, { color: c.textMuted }, activeTab === 'tips' && { color: c.text }]}>
+            Style Tips
+          </Text>
+        </Pressable>
       </View>
 
-      {loading ? (
-        <View style={styles.centerState}>
-          <ActivityIndicator />
-          <Text style={styles.centerText}>Loading explore feed...</Text>
-        </View>
+      {activeTab === 'aesthetics' ? (
+        <FlatList
+          data={INSPIRATION}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <InspirationCard item={item} />}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
       ) : (
-        <>
-          {loadError ? (
-            <View style={styles.warningBanner}>
-              <Text style={styles.warningText}>{loadError}</Text>
-            </View>
-          ) : null}
-          <FlatList
-            data={visibleFeed}
-            keyExtractor={(item) => item.id}
-            numColumns={3}
-            style={styles.feedList}
-            contentContainerStyle={styles.gridContent}
-            initialNumToRender={initialVisibleCount}
-            extraData={visibleCount}
-            keyboardShouldPersistTaps="handled"
-            onRefresh={onRefresh}
-            refreshing={refreshing}
-            renderItem={renderTile}
-            onEndReached={handleEndReached}
-            onEndReachedThreshold={0.5}
-            onScroll={handleScroll}
-            onMomentumScrollEnd={handleScrollEnd}
-            onScrollEndDrag={handleScrollEnd}
-            scrollEventThrottle={16}
-            ListFooterComponent={
-              visibleCount < filteredFeed.length ? (
-                <View style={styles.footerLoader}>
-                  <ActivityIndicator size="small" />
-                </View>
-              ) : null
-            }
-            ListEmptyComponent={
-              <View style={styles.centerState}>
-                <Text style={styles.centerText}>No explore results for "{query}"</Text>
-              </View>
-            }
-          />
-        </>
+        <ScrollView contentContainerStyle={styles.listContent}>
+          {TIPS.map((tip) => <TipCard key={tip.id} item={tip} colors={c} />)}
+        </ScrollView>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    paddingTop: 14,
-  },
-  topControls: {
-    paddingHorizontal: 16,
-  },
-  searchWrap: {
+  container: { flex: 1 },
+  tabRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e6e6e6',
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 48,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 15,
-    color: '#111',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    marginTop: 10,
-    marginBottom: 10,
-  },
-  filterChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#e2e2e2',
-    backgroundColor: '#f8f8f8',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    marginRight: 8,
-  },
-  filterChipActive: {
-    backgroundColor: '#111',
-    borderColor: '#111',
-  },
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
-  },
-  filterChipTextActive: {
-    color: '#fff',
-  },
-  feedList: {
-    flex: 1,
-  },
-  gridContent: {
-    paddingBottom: 24,
-    flexGrow: 1,
-  },
-  tile: {
-    width: '33.3333%',
-    aspectRatio: 1,
-    borderRadius: 0,
-    overflow: 'hidden',
-    backgroundColor: '#efefef',
-  },
-  tileImage: {
-    width: '100%',
-    height: '100%',
-  },
-  tileBadge: {
-    position: 'absolute',
-    top: 6,
-    left: 6,
-    backgroundColor: 'rgba(0,0,0,0.60)',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  tileBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  centerState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 40,
-  },
-  centerText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#111',
-  },
-  warningBanner: {
     marginHorizontal: 16,
-    marginBottom: 8,
+    marginTop: 14,
+    marginBottom: 12,
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fff4dd',
+    padding: 3,
+  },
+  tab: {
+    flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: 'center',
+  },
+  tabActive: {
+    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
+  },
+  tabText: { fontSize: 14, fontWeight: '600' },
+  listContent: { paddingHorizontal: 16, paddingBottom: 32 },
+  card: {
+    borderRadius: 18, padding: 20, marginBottom: 14,
+  },
+  cardEmoji: { fontSize: 32, marginBottom: 8 },
+  cardAesthetic: { fontSize: 22, fontWeight: '800', marginBottom: 6 },
+  cardTip: { fontSize: 14, lineHeight: 20, marginBottom: 14 },
+  cardPieces: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
+  piecePill: {
+    borderWidth: 1, borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  pieceText: { fontSize: 12, fontWeight: '600' },
+  cardCta: { fontSize: 13, fontWeight: '700' },
+  tipCard: {
+    flexDirection: 'row',
+    borderRadius: 14, padding: 14, marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#ffe2a6',
   },
-  warningText: {
-    color: '#7a4f00',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  footerLoader: {
-    paddingVertical: 14,
-  },
+  tipEmoji: { fontSize: 28, marginRight: 12, marginTop: 2 },
+  tipBody: { flex: 1 },
+  tipTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  tipText: { fontSize: 13, lineHeight: 19 },
 });

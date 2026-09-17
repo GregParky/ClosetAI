@@ -11,39 +11,45 @@
     "orientation": "portrait",
     "platforms": [
       "ios",
-      "android",
-      "web"
+      "android"
     ],
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#111111"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.gregpark.closetai",
+      "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "ClosetAI accesses your photo library so you can add clothing items to your closet.",
+        "NSCameraUsageDescription": "ClosetAI uses your camera to photograph clothing items for your closet.",
+        "NSLocationWhenInUseUsageDescription": "ClosetAI uses your location to show live weather and tailor outfit suggestions to the conditions outside."
       }
     },
     "android": {
       "package": "com.gregpark.closetai",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      },
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "extra": {
       "google": {
-        "webClientId": "1009777341636-37bfbmg1e901n9s2tji0tc2i1f81fsj7.apps.googleusercontent.com",
-        "iosClientId": "1009777341636-1nmlmms9h1tn19ina5v2u8sglghhtfof.apps.googleusercontent.com",
+        "webClientId": "626091187407-8jteapulfhpgt9j99nsgbdinec10ntfn.apps.googleusercontent.com",
+        "iosClientId": "626091187407-hgvg7kb67n25mc97j5734kbarl3ofkdj.apps.googleusercontent.com",
         "androidClientId": "1009777341636-5q9i0an6rthkkliv8vvqmfk054uhrbmp.apps.googleusercontent.com"
       },
       "eas": {
@@ -51,7 +57,16 @@
       }
     },
     "plugins": [
-      "expo-web-browser"
-    ]
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ClosetAI accesses your photos to add clothing items to your closet.",
+          "cameraPermission": "ClosetAI uses your camera to photograph clothing items."
+        }
+      ],
+      "expo-asset"
+    ],
+    "newArchEnabled": true
   }
 }

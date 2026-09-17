@@ -13,8 +13,7 @@ service cloud.firestore {
       return data.keys().hasAll(['userId', 'imageUrl', 'category', 'type', 'color']) &&
         data.userId is string &&
         data.userId.size() > 0 &&
-        data.imageUrl is string &&
-        data.imageUrl.size() > 0 &&
+        (data.imageUrl is string || data.imageUrl == null) &&
         data.category is string &&
         data.type is string &&
         data.color is string &&
@@ -50,8 +49,82 @@ service cloud.firestore {
       allow read: if isOwner(userId);
       allow create, update: if isOwner(userId) &&
         (!('avoidDenimOnDenim' in request.resource.data) || request.resource.data.avoidDenimOnDenim is bool) &&
-        (!('preferCasual' in request.resource.data) || request.resource.data.preferCasual is bool);
+        (!('preferCasual' in request.resource.data) || request.resource.data.preferCasual is bool) &&
+        (!('styles' in request.resource.data) || request.resource.data.styles is list);
       allow delete: if false;
+    }
+
+    // Saved outfits — readable by any signed-in user for social browsing.
+    // Only the owner can delete or change fields other than likeCount.
+    match /savedOutfits/{outfitId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn();
+      allow delete: if isOwner(resource.data.userId);
+      allow update: if isOwner(resource.data.userId) ||
+        (isSignedIn() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount']));
+    }
+
+    // Outfit likes — one doc per user-outfit pair.
+    match /outfitLikes/{likeId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update: if false;
+    }
+
+    // User profiles — readable by any signed-in user, writable by owner only.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if false;
+    }
+
+    // Follow relationships.
+    match /follows/{followId} {
+      allow read: if isSignedIn();
+      // Only the sender can create a pending request.
+      allow create: if isSignedIn()
+        && request.resource.data.followerId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      // Only the recipient can accept (flip status to 'accepted').
+      allow update: if isSignedIn()
+        && resource.data.followeeId == request.auth.uid
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.followerId == resource.data.followerId
+        && request.resource.data.followeeId == resource.data.followeeId;
+      // Sender can cancel/unfollow; recipient can decline.
+      allow delete: if isSignedIn()
+        && (resource.data.followerId == request.auth.uid
+            || resource.data.followeeId == request.auth.uid);
+    }
+
+    // Wear ratings (direct post-wear scores).
+    match /outfitWearRatings/{ratingId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // Outfit ELO ratings — private to owner, readable by any signed-in user for leaderboard.
+    match /outfitRatings/{ratingId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // Wear logs — created by user, readable/deletable by owner.
+    match /wearLogs/{logId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if isOwner(resource.data.userId);
+      allow update: if false;
+    }
+
+    // Outfit planner — user owns their plan docs.
+    match /outfitPlans/{planId} {
+      allow create, update: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if isOwner(resource.data.userId);
     }
 
     // Inbox notifications (server/admin-written; user-readable).
@@ -107,6 +180,12 @@ service cloud.firestore {
     match /trending_outfits/{docId} {
       allow read: if true;
       allow write: if false;
+    }
+
+    // Outfit collections (user-curated playlists of saved outfits)
+    match /outfitCollections/{collectionId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if isOwner(resource.data.userId);
     }
 
     match /{document=**} {
